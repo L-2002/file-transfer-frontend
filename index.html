@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>文件无痕传输</title>
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<style>
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+body {
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background-color: #f7f8fa;
+  color: #1a1a1a;
+  padding: 20px 16px;
+  max-width: 720px;
+  margin: 0 auto;
+  line-height: 1.55;
+}
+
+.card {
+  background: #ffffff;
+  border-radius: 14px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+  padding: 24px;
+  margin-bottom: 18px;
+}
+
+h2 {
+  text-align: center;
+  margin-bottom: 20px;
+  font-size: 22px;
+  font-weight: 600;
+  color: #111;
+}
+
+.status-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 22px;
+  background-color: #f4f6f9;
+  padding: 12px 14px;
+  border-radius: 10px;
+}
+.status-dot {
+  width:12px;
+  height:12px;
+  border-radius: 50%;
+  flex-shrink:0;
+}
+.status-wait { background-color: #f59e0b; }
+.status-ok  { background-color: #10b981; }
+.status-fail{ background-color: #ef4444; }
+.status-text { font-size:14.5px; }
+
+.item {
+  margin-bottom: 20px;
+}
+.item-label-title {
+  display:block;
+  margin-bottom:8px;
+  font-weight:600;
+  font-size:17px;
+  color:#000000;
+}
+
+.local-room-line {
+  display:flex;
+  align-items:center;
+  gap:10px;
+}
+.local-room-line .item-label-title {
+  margin-bottom:0;
+  flex-shrink:0;
+}
+#localRoom {
+  flex:1;
+  padding: 8px 12px;
+  border:none;
+  background:transparent;
+  font-family: "Consolas", monospace;
+  font-weight:700;
+  font-size:24px;
+  color:#2563eb;
+  letter-spacing:4px;
+}
+
+#remoteRoom {
+  width:100%;
+  padding:14px 16px;
+  border:1.5px solid #d1d5db;
+  border-radius:10px;
+  font-size:18px;
+  font-family:Consolas,monospace;
+  letter-spacing:3px;
+  text-align:center;
+  background-color:#ffffff;
+  transition:0.22s;
+}
+#remoteRoom:focus {
+  outline:none;
+  border-color:#2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+input[type="password"] {
+  width:100%;
+  padding: 11px 14px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size:15px;
+  background-color:#fff;
+  transition: border 0.2s;
+}
+input[type="password"]:focus {
+  outline:none;
+  border-color:#3b82f6;
+}
+
+button {
+  width:100%;
+  padding:11px 14px;
+  border:none;
+  border-radius:8px;
+  background-color:#2563eb;
+  color:#ffffff !important;
+  font-size:15px;
+  cursor:pointer;
+  margin-top:6px;
+  font-weight:500;
+  transition: background 0.2s;
+}
+button:hover:not(:disabled) {
+  background-color:#1d4ed8;
+}
+button:disabled {
+  background-color:#9ca3af;
+  cursor:not-allowed;
+}
+
+.drop-wrap {
+  border:2px dashed #b8c2d0;
+  border-radius:10px;
+  padding:32px 14px;
+  text-align:center;
+  cursor:pointer;
+  transition: all 0.22s;
+  background-color:#f9fafb;
+}
+.drop-wrap.active {
+  border-color:#2563eb;
+  background-color:#eff6ff;
+}
+.drop-tip {
+  font-size:15px;
+  color:#4b5563;
+}
+#fileInput {
+  display:none;
+}
+
+.file-list {
+  margin-top:10px;
+  border:1px solid #e5e7eb;
+  border-radius:8px;
+  background:#ffffff;
+  max-height:180px;
+  overflow-y:auto;
+}
+.file-item {
+  padding:9px 12px;
+  display:flex;
+  align-items:center;
+  gap:8px;
+  border-bottom:1px solid #f3f4f6;
+  font-size:14px;
+}
+.file-item:last-child {
+  border-bottom:none;
+}
+.file-name-part {
+  flex:1;
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.file-size-part {
+  flex-shrink:0;
+  color:#444;
+}
+.file-del {
+  color:#dc2626 !important;
+  cursor:pointer;
+  padding:2px 6px;
+  user-select:none;
+  font-size:18px;
+  font-weight:bold;
+  flex-shrink:0;
+}
+
+.recv-wrap {
+  border:1px solid #e5e7eb;
+  border-radius:8px;
+  background:#fff;
+  max-height:260px;
+  overflow-y:auto;
+}
+.recv-head {
+  display:flex;
+  align-items:center;
+  gap:8px;
+  padding:10px 12px;
+  background-color:#f4f6f9;
+  border-bottom:1px solid #e5e7eb;
+}
+.recv-item {
+  display:flex;
+  align-items:center;
+  gap:8px;
+  padding:10px 12px;
+  border-bottom:1px solid #f3f4f6;
+  font-size:14px;
+  white-space:nowrap;
+}
+.recv-item:last-child {
+  border-bottom:none;
+}
+.recv-name-part {
+  flex:1;
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.recv-size-part {
+  flex-shrink:0;
+  color:#444;
+}
+.recv-progress-wrap {
+  flex-shrink:0;
+  width:100px;
+  height:7px;
+  background:#e5e7eb;
+  border-radius:4px;
+  overflow:hidden;
+}
+.recv-progress-fill {
+  height:100%;
+  background:#22c55e;
+  width:0%;
+}
+
+.log {
+  background-color:#111827;
+  color:#86efac !important;
+  padding:12px;
+  border-radius:8px;
+  font-family:Consolas,monospace;
+  font-size:13px;
+  min-height:130px;
+  white-space:pre-wrap;
+  overflow:auto;
+}
+</style>
+</head>
+<body>
+<div class="card">
+  <h2>文件无痕传输</h2>
+  <div class="status-row">
+    <div class="status-dot status-wait" id="statusDot"></div>
+    <div class="status-text" id="statusText">未初始化</div>
+  </div>
+
+  <div id="lockArea">
+    <div class="item">
+      <label class="item-label-title">访问口令</label>
+      <input id="pwdInput" type="password" placeholder="输入访问口令">
+      <button id="unlockBtn">解锁进入</button>
+    </div>
+  </div>
+
+  <div id="mainArea" style="display:none;">
+    <div class="item local-room-line">
+      <label class="item-label-title">本机房间号码：</label>
+      <input id="localRoom" readonly>
+    </div>
+
+    <div class="item">
+      <label class="item-label-title">连接对方房间码</label>
+      <input id="remoteRoom" placeholder="请输入6位房间码">
+      <button id="connectBtn">发起连接</button>
+    </div>
+
+    <div class="item">
+      <label class="item-label-title">待发送文件 <span id="sendFileCount"></span></label>
+      <div class="drop-wrap" id="dropBox">
+        <div class="drop-tip">点击此处 或者 将文件拖拽到框内</div>
+      </div>
+      <input type="file" id="fileInput" multiple />
+      <div class="file-list" id="sendFileList"></div>
+      <button id="sendBtn" disabled>发送全部选中文件</button>
+    </div>
+
+    <div class="item">
+      <label class="item-label-title">📥 已接收到的文件（勾选后下载） <span id="recvFileCount"></span></label>
+      <div class="recv-wrap">
+        <div class="recv-head">
+          <input type="checkbox" id="checkAllRecv">
+          <span>全选</span>
+        </div>
+        <div id="recvFileList"></div>
+      </div>
+      <button id="downloadSelectedBtn" disabled>下载勾选的文件</button>
+    </div>
+
+    <div class="item">
+      <label class="item-label-title">运行日志</label>
+      <div class="log" id="logBox"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const PASSWORD = "liyuanhang";
+const CHUNK_SIZE = 64 * 1024;
+
+const lockArea = document.getElementById('lockArea');
+const pwdInput = document.getElementById('pwdInput');
+const unlockBtn = document.getElementById('unlockBtn');
+const mainArea = document.getElementById('mainArea');
+const localRoom = document.getElementById('localRoom');
+const remoteRoom = document.getElementById('remoteRoom');
+const connectBtn = document.getElementById('connectBtn');
+const fileInput = document.getElementById('fileInput');
+const dropBox = document.getElementById('dropBox');
+const sendFileList = document.getElementById('sendFileList');
+const sendBtn = document.getElementById('sendBtn');
+const logBox = document.getElementById('logBox');
+const statusDot = document.getElementById('statusDot');
+const statusText = document.getElementById('statusText');
+
+const checkAllRecv = document.getElementById('checkAllRecv');
+const recvFileList = document.getElementById('recvFileList');
+const downloadSelectedBtn = document.getElementById('downloadSelectedBtn');
+const sendFileCount = document.getElementById('sendFileCount');
+const recvFileCount = document.getElementById('recvFileCount');
+
+let peer = null;
+let conn = null;
+let selectedSendFiles = [];
+let receivedFileStore = [];
+
+function updateCountText(){
+  sendFileCount.textContent = `(${selectedSendFiles.length}个文件)`;
+  recvFileCount.textContent = `(${receivedFileStore.length}个文件)`;
+}
+
+function setStatus(state, tip){
+  statusText.innerText = tip;
+  switch(state){
+    case 'waiting': statusDot.className = "status-dot status-wait"; break;
+    case 'ready': statusDot.className = "status-dot status-ok"; break;
+    case 'error': statusDot.className = "status-dot status-fail"; break;
+  }
+}
+
+function log(msg){
+  logBox.innerText += new Date().toLocaleTimeString()+" "+msg+"\n";
+  logBox.scrollTop = logBox.scrollHeight;
+}
+
+function genRoomCode(){
+  return String(Math.floor(100000 + Math.random()*900000));
+}
+
+function formatBytes(bytes){
+  if(bytes < 1024) return bytes + "B";
+  if(bytes < 1048576) return (bytes/1024).toFixed(1)+"KB";
+  return (bytes/1048576).toFixed(1)+"MB";
+}
+
+unlockBtn.onclick = ()=>{
+  if(pwdInput.value.toLowerCase() !== PASSWORD.toLowerCase()){
+    log("口令错误");
+    return;
+  }
+  lockArea.style.display = "none";
+  mainArea.style.display = "block";
+  initPeer();
+};
+
+dropBox.onclick = ()=> fileInput.click();
+dropBox.ondragover = (e)=>{e.preventDefault(); dropBox.classList.add('active');};
+dropBox.ondragleave = ()=> dropBox.classList.remove('active');
+dropBox.ondrop = (e)=>{
+  e.preventDefault();
+  dropBox.classList.remove('active');
+  const files = Array.from(e.dataTransfer.files);
+  appendSendFiles(files);
+};
+fileInput.onchange = ()=>{
+  const files = Array.from(fileInput.files);
+  appendSendFiles(files);
+};
+
+function appendSendFiles(files){
+  for(const f of files){
+    if(!selectedSendFiles.some(x=>x.name===f.name && x.size===f.size)){
+      selectedSendFiles.push(f);
+    }
+  }
+  renderSendList();
+  updateCountText();
+  sendBtn.disabled = !(conn && selectedSendFiles.length>0);
+}
+
+function renderSendList(){
+  sendFileList.innerHTML = "";
+  selectedSendFiles.forEach((file,idx)=>{
+    const div = document.createElement('div');
+    div.className = "file-item";
+    div.innerHTML = `
+      <span class="file-name-part">${file.name}</span>
+      <span class="file-size-part">(${formatBytes(file.size)})</span>
+      <span class="file-del" data-idx="${idx}">×</span>
+    `;
+    sendFileList.appendChild(div);
+  });
+  document.querySelectorAll('.file-del').forEach(el=>{
+    el.onclick = function(){
+      const i = Number(this.dataset.idx);
+      selectedSendFiles.splice(i,1);
+      renderSendList();
+      updateCountText();
+      sendBtn.disabled = !(conn && selectedSendFiles.length>0);
+    }
+  })
+}
+
+function renderRecvList(){
+  recvFileList.innerHTML = "";
+  receivedFileStore.forEach((item,idx)=>{
+    const div = document.createElement('div');
+    div.className = "recv-item";
+    const pct = item.size>0 ? Math.min(100, Math.round((item.received / item.size)*100)) : 0;
+    div.innerHTML = `
+      <input type="checkbox" class="recv-checkbox" data-idx="${idx}" ${item.complete?'':'disabled'} ${item.checked?'checked':''}>
+      <span class="recv-name-part" title="${item.name}">${item.name}</span>
+      <span class="recv-size-part">(${formatBytes(item.size)})</span>
+      <div class="recv-progress-wrap">
+        <div class="recv-progress-fill" style="width:${pct}%"></div>
+      </div>
+    `;
+    recvFileList.appendChild(div);
+  });
+  bindRecvCheck();
+  updateCountText();
+  downloadSelectedBtn.disabled = receivedFileStore.filter(i=>i.complete&&i.checked).length===0;
+}
+
+function bindRecvCheck(){
+  const boxes = document.querySelectorAll('.recv-checkbox');
+  boxes.forEach(cb=>{
+    cb.onchange = function(){
+      const idx = Number(this.dataset.idx);
+      if(receivedFileStore[idx].complete){
+        receivedFileStore[idx].checked = this.checked;
+        renderRecvList();
+      }
+    }
+  })
+}
+
+checkAllRecv.onchange = ()=>{
+  const on = checkAllRecv.checked;
+  receivedFileStore.forEach(f=>{
+    if(f.complete) f.checked = on;
+  });
+  renderRecvList();
+};
+
+downloadSelectedBtn.onclick = ()=>{
+  const list = receivedFileStore.filter(x=>x.complete && x.checked);
+  for(const fi of list){
+    const blob = new Blob(fi.buffer);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fi.name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+};
+
+function initPeer(){
+  const myRoomId = genRoomCode();
+  localRoom.value = myRoomId;
+  setStatus('waiting','正在唤醒信令服务，请稍候…');
+  log("正在连接Render自建信令服务器");
+
+  // ========== 修改这里 host 为你的Render后端域名 ==========
+  peer = new Peer(myRoomId, {
+    host: "RENDER_BACKEND_DOMAIN",
+    port: 443,
+    path: "/peerjs",
+    secure: true,
+    config: {
+      iceServers: [
+        { urls: ["stun:stun.l.google.com:19302"] },
+        { urls: ["stun:stun2.l.google.com:19302"] }
+      ]
+    }
+  });
+
+  peer.on('open',(id)=>{
+    setStatus('ready',`✅信令就绪，本机房间：${id}`);
+    log(`✅本机房间码生成：${id}`);
+  });
+
+  peer.on('error',(err)=>{
+    setStatus('error',`❌信令异常:${err.type}`);
+    log(`❌Peer错误: ${err.type} ${err.message}`);
+  });
+
+  peer.on('connection',(c)=>{
+    log("收到对方主动接入");
+    setupConnection(c);
+  });
+}
+
+connectBtn.onclick = ()=>{
+  const remoteId = remoteRoom.value.trim();
+  if(!/^\d{6}$/.test(remoteId)){
+    log("请输入6位房间码");
+    return;
+  }
+  log(`尝试连接对方房间：${remoteId}`);
+  const c = peer.connect(remoteId);
+  setupConnection(c);
+};
+
+let recvMeta = null;
+let recvBuffer = [];
+
+function setupConnection(c){
+  conn = c;
+  sendBtn.disabled = !(selectedSendFiles.length>0);
+
+  c.on('open',()=>{
+    log("✅P2P连接通道已建立，可以收发文件");
+  });
+
+  c.on('data',async (data)=>{
+    if(data.type === "file_meta"){
+      recvMeta = data;
+      recvBuffer = [];
+      log(`📥开始接收文件：${data.name} ${formatBytes(data.size)}`);
+      receivedFileStore.push({
+        name: data.name,
+        size: data.size,
+        buffer: [],
+        received:0,
+        complete:false,
+        checked:false
+      });
+      renderRecvList();
+    }else if(data.type === "file_chunk"){
+      recvBuffer.push(data.blob);
+      const item = receivedFileStore[receivedFileStore.length-1];
+      item.received += data.blob.size;
+      item.buffer.push(data.blob);
+      renderRecvList();
+      if(item.received >= item.size){
+        item.complete = true;
+        log(`✅文件接收完成：${item.name}`);
+        renderRecvList();
+      }
+    }
+  });
+
+  c.on('close',()=>{
+    log("⚠️P2P连接断开");
+    conn = null;
+    sendBtn.disabled = true;
+  });
+
+  c.on('error',(e)=>{
+    log(`❌连接异常 ${e}`);
+  });
+}
+
+sendBtn.onclick = async ()=>{
+  if(!conn) { log("未建立P2P连接"); return; }
+  if(selectedSendFiles.length===0){ log("请选择待发送文件"); return; }
+  for(const file of selectedSendFiles){
+    log(`📤开始发送文件：${file.name}`);
+    conn.send({
+      type:"file_meta",
+      name:file.name,
+      size:file.size
+    });
+    let offset = 0;
+    while(offset < file.size){
+      const slice = file.slice(offset, offset + CHUNK_SIZE);
+      const ab = await slice.arrayBuffer();
+      const blob = new Blob([ab]);
+      conn.send({type:"file_chunk", blob});
+      offset += CHUNK_SIZE;
+    }
+    log(`✅文件发送完成：${file.name}`);
+  }
+};
+</script>
+</body>
+</html>
